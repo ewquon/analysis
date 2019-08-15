@@ -61,17 +61,17 @@ class CaseStudy(object):
         Noffset = self._calc_offset(downD)
         return Uprofile[self.Navg-1:-Noffset,:]
 
-    def get_outputs(self,name,downD):
+    def get_outputs(self,name,downD,suffix=''):
         """Return dictionary with trajectory_file and outlines_file"""
         name = name.replace(' ','_').replace('(','').replace(')','')
-        dpath = os.path.join(self.casedir,name)
+        dpath = os.path.join(self.casedir,name+suffix)
         if not os.path.isdir(dpath):
             os.makedirs(dpath)
         tfile = 'trajectory_{:g}D.csv'.format(downD)
         ofile = 'outlines_{:g}D.pkl'.format(downD)
         outputs = {
-            'trajectory_file': os.path.join(self.casedir,name,tfile),
-            'outlines_file': os.path.join(self.casedir,name,ofile),
+            'trajectory_file': os.path.join(self.casedir,name+suffix,tfile),
+            'outlines_file': os.path.join(self.casedir,name+suffix,ofile),
         }
         return outputs
 
