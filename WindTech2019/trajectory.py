@@ -4,6 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+def moving_median(series, window=3):
+    return series.rolling(window, center=True).median()
+
 class Trajectory(object):
     def __init__(self,case,method):
         self.case = case
@@ -16,6 +19,7 @@ class Trajectory(object):
         and store data in a dataframe for processing.
         """
         dflist = []
+        self.Ntimes = {}
         for downD in self.case.downstreamD:
             outputs = self.case.get_outputs(self.method,downD)
             print(outputs['trajectory_file'])
@@ -25,7 +29,9 @@ class Trajectory(object):
             df.columns = ['t','y','z']
             df['x'] = downD * self.case.turbine.D
             df['z'] -= self.case.turbine.zhub
-            dflist.append(df.set_index(['t','x'])[['y','z']])
+            df = df.set_index(['t','x'])[['y','z']]
+            self.Ntimes[downD] = len(df.index.levels[0])
+            dflist.append(df)
         self.df = pd.concat(dflist).sort_index()
 
     def identify_outliers(self,df,yrange,zrange,edgebuffer=1.0):
@@ -55,6 +61,26 @@ class Trajectory(object):
         yout,zout = self.identify_outliers(self.df,yrange,zrange,edgebuffer)
         self.df.loc[yout,'y'] = np.nan
         self.df.loc[zout,'z'] = np.nan
+
+    def _interpolate(self,method='linear'):
+        unstacked = self.df.unstack()
+        unstacked.interpolate(method=method,inplace=True)
+        self.df = unstacked.stack(dropna=False)
+
+    def _filter(self,method=moving_median,**kwargs):
+        unstacked = self.df.unstack()
+        unstacked = method(unstacked,**kwargs)
+        self.df = unstacked.stack(dropna=False)
+
+    def filter(self,yrange,zrange,edgebuffer=1.0,
+               interp='linear',
+               method=moving_median,**filter_kwargs):
+        """Convenience function for performing all QC operations"""
+        self.remove_outliers(yrange,zrange,edgebuffer)
+        unstacked = self.df.unstack()
+        unstacked.interpolate(method=interp,inplace=True)
+        unstacked = method(unstacked,**filter_kwargs)
+        self.df = unstacked.stack(dropna=False)
 
     def rms_error(self,df,ref):
         assert (len(df)==len(ref))
@@ -124,6 +150,7 @@ class Trajectory(object):
 
     def plot_xy(self,itime=0,**kwargs):
         """Plot lateral meandering"""
+        print('NOTE: THIS DOES _NOT_ ACCOUNT FOR INFLOW ADVECTION TIME OFFSETS')
         fig,ax = self.init_plot(**kwargs)
         self.update_plot(itime)
         return fig,ax
