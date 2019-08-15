@@ -34,6 +34,28 @@ class Trajectory(object):
             dflist.append(df)
         self.df = pd.concat(dflist).sort_index()
 
+    def write_trajectory_files(self,suffix='--filtered'):
+        """Write collection of trajectory files to a new directory.
+        """
+        for downD in self.case.downstreamD:
+            xi = downD * self.case.turbine.D
+            inputs = self.case.get_outputs(self.method,downD)
+            outputs = self.case.get_outputs(self.method,downD,suffix=suffix)
+            print(outputs['trajectory_file'])
+            df = pd.read_csv(inputs['trajectory_file'],
+                             header=None)
+            # should have at least 3 columns
+            # 0: time, 1: ywake, 2: zwake
+            newdf = self.df.xs(xi, level='x').iloc[:self.Ntimes[downD]]
+            assert (len(newdf) == len(df))
+            notna = ~pd.isna(newdf['y'])
+            print('updated',np.count_nonzero(notna),'/',len(newdf),'at x=',xi)
+            df.loc[notna,1] = newdf.loc[notna,'y']
+            df.loc[notna,2] = newdf.loc[notna,'z'] + self.case.turbine.zhub
+            df.to_csv(outputs['trajectory_file'],
+                      header=None,index=None)
+
+
     def identify_outliers(self,df,yrange,zrange,edgebuffer=1.0):
         zrange = np.array(zrange)
         zrange -= self.case.turbine.zhub
@@ -76,6 +98,7 @@ class Trajectory(object):
                interp='linear',
                method=moving_median,**filter_kwargs):
         """Convenience function for performing all QC operations"""
+        self.df0 = self.df.copy()
         self.remove_outliers(yrange,zrange,edgebuffer)
         unstacked = self.df.unstack()
         unstacked.interpolate(method=interp,inplace=True)
