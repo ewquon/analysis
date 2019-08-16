@@ -8,15 +8,11 @@ class Turbine(object):
     def __init__(self):
         self.rotor_area = np.pi/4 * self.D**2
 
-    def thrust(self):
+    def thrust(self,Uref):
         """Calculate reference thrust/density"""
-        if not hasattr(self,'CT'):
+        if not hasattr(self,'CTref'):
             raise ValueError('Thrust coefficient (CT) not defined')
-        if not hasattr(self,'Uref'):
-            raise ValueError('Reference velocity (Uref) not defined')
-        return self.CT * 0.5 * self.Uref**2 * self.rotor_area
-        
-
+        return self.CTref * 0.5 * Uref**2 * self.rotor_area
 
 class CaseStudy(object):
     """Base class with common functions for studies"""
