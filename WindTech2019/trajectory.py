@@ -4,6 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+def moving_median(series, window=3):
+    return series.rolling(window, center=True).median()
+
 class Trajectory(object):
     def __init__(self,case,method):
         self.case = case
@@ -16,6 +19,7 @@ class Trajectory(object):
         and store data in a dataframe for processing.
         """
         dflist = []
+        self.Ntimes = {}
         for downD in self.case.downstreamD:
             outputs = self.case.get_outputs(self.method,downD)
             print(outputs['trajectory_file'])
@@ -25,8 +29,32 @@ class Trajectory(object):
             df.columns = ['t','y','z']
             df['x'] = downD * self.case.turbine.D
             df['z'] -= self.case.turbine.zhub
-            dflist.append(df.set_index(['t','x'])[['y','z']])
+            df = df.set_index(['t','x'])[['y','z']]
+            self.Ntimes[downD] = len(df.index.levels[0])
+            dflist.append(df)
         self.df = pd.concat(dflist).sort_index()
+
+    def write_trajectory_files(self,suffix='--filtered'):
+        """Write collection of trajectory files to a new directory.
+        """
+        for downD in self.case.downstreamD:
+            xi = downD * self.case.turbine.D
+            inputs = self.case.get_outputs(self.method,downD)
+            outputs = self.case.get_outputs(self.method,downD,suffix=suffix)
+            print(outputs['trajectory_file'])
+            df = pd.read_csv(inputs['trajectory_file'],
+                             header=None)
+            # should have at least 3 columns
+            # 0: time, 1: ywake, 2: zwake
+            newdf = self.df.xs(xi, level='x').iloc[:self.Ntimes[downD]]
+            assert (len(newdf) == len(df))
+            notna = ~pd.isna(newdf['y'])
+            print('updated',np.count_nonzero(notna),'/',len(newdf),'at x=',xi)
+            df.loc[notna,1] = newdf.loc[notna,'y']
+            df.loc[notna,2] = newdf.loc[notna,'z'] + self.case.turbine.zhub
+            df.to_csv(outputs['trajectory_file'],
+                      header=None,index=None)
+
 
     def identify_outliers(self,df,yrange,zrange,edgebuffer=1.0):
         zrange = np.array(zrange)
@@ -55,6 +83,27 @@ class Trajectory(object):
         yout,zout = self.identify_outliers(self.df,yrange,zrange,edgebuffer)
         self.df.loc[yout,'y'] = np.nan
         self.df.loc[zout,'z'] = np.nan
+
+    def _interpolate(self,method='linear'):
+        unstacked = self.df.unstack()
+        unstacked.interpolate(method=method,inplace=True)
+        self.df = unstacked.stack(dropna=False)
+
+    def _filter(self,method=moving_median,**kwargs):
+        unstacked = self.df.unstack()
+        unstacked = method(unstacked,**kwargs)
+        self.df = unstacked.stack(dropna=False)
+
+    def filter(self,yrange,zrange,edgebuffer=1.0,
+               interp='linear',
+               method=moving_median,**filter_kwargs):
+        """Convenience function for performing all QC operations"""
+        self.df0 = self.df.copy()
+        self.remove_outliers(yrange,zrange,edgebuffer)
+        unstacked = self.df.unstack()
+        unstacked.interpolate(method=interp,inplace=True)
+        unstacked = method(unstacked,**filter_kwargs)
+        self.df = unstacked.stack(dropna=False)
 
     def rms_error(self,df,ref):
         assert (len(df)==len(ref))
@@ -124,6 +173,7 @@ class Trajectory(object):
 
     def plot_xy(self,itime=0,**kwargs):
         """Plot lateral meandering"""
+        print('NOTE: THIS DOES _NOT_ ACCOUNT FOR INFLOW ADVECTION TIME OFFSETS')
         fig,ax = self.init_plot(**kwargs)
         self.update_plot(itime)
         return fig,ax
