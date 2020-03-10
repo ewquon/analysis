@@ -3,6 +3,17 @@ from scipy.io import loadmat
 import pandas as pd
 import xarray as xr
 
+description = {
+    'SonicT': 'sonic temperature',
+    'SonicU': 'sonic west-east wind component',
+    'SonicV': 'sonic south-north wind component',
+    'SonicW': 'sonic vertical wind componentt',
+    'SonicWS': 'sonic wind speed',
+    'SonicWD': 'sonic wind direction',
+    # log 20Hz
+    
+}
+
 def convert_met(fpath,
                 sonic_outputs=['T','U','V','W','WS','WD'],
                 height_unit='m',
@@ -76,8 +87,8 @@ def convert_met(fpath,
                 # - need to do this before converting to timedelta
                 isnat = np.where(pd.isna(tseconds))[0]
                 tseconds = pd.Series(tseconds).interpolate()
-                print('WARNING: NaT(s) found')
                 if verbose:
+                    print('WARNING: NaT(s) found')
                     for i in isnat:
                         print('  interpolated timestamp at',
                               t0 + pd.to_timedelta(tseconds.iloc[i], unit='s'))
@@ -103,7 +114,11 @@ def convert_met(fpath,
     df.index.name = 'datetime'
     df = df.set_index('height',append=True)
     ds = df.to_xarray()
-    ds.attrs = attrs
     
+    # assign attributes
+    ds.attrs = attrs
+    for output in sonic_outputs:
+        ds[output] = ds[output].assign_attrs(description=description[output],
+                                             units=sonic_units[output])
     return ds
 
