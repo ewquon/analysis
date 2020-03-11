@@ -5,6 +5,7 @@ __pycache__/
 # data files
 *.csv
 *.csv.*
+*.nc
 
 # output files
 log.*

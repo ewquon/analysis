@@ -1,0 +1,115 @@
+{
+  "type": "floris_input",
+  "name": "floris_input_file_Example",
+  "description": "Example FLORIS Input file",
+  "farm": {
+    "type": "farm",
+    "name": "farm_example_1x1",
+    "description": "Example 1x1 Wind Farm",
+    "properties": {
+      "wind_speed": [1.0],
+      "wind_direction": [270.0],
+      "turbulence_intensity": [0.06],
+      "wind_shear": 0.0,
+      "wind_veer": 0.0,
+      "air_density": 1.225,
+      "layout_x": [
+        0.0
+      ],
+      "layout_y": [
+        0.0
+      ],
+      "wind_x": [0],
+      "wind_y": [0]
+    }
+  },
+  "turbine": {
+    "type": "turbine",
+    "name": "dummy",
+    "description": "dummy",
+    "properties": {
+      "rotor_diameter": 2.0,
+      "hub_height": 1.5,
+      "blade_count": 3,
+      "pP": 1.88,
+      "pT": 1.88,
+      "generator_efficiency": 1.0,
+      "power_thrust_table": {
+        "power": [0.3,0.3],
+        "thrust": [0.40, 0.40],
+        "wind_speed": [ 0.0 , 30.0]
+      },
+      "blade_pitch": 0.0,
+      "yaw_angle": 0.0,
+      "tilt_angle": 0.0,
+      "TSR": 8.0
+    }
+  },
+  "wake": {
+    "type": "wake",
+    "name": "wake_default",
+    "description": "wake",
+    "properties": {
+      "velocity_model": "gauss",
+      "deflection_model": "gauss",
+      "combination_model": "sosfs",
+      "parameters": {
+        "turbulence_intensity": {
+          "initial": 0.1,
+          "constant": 0.73,
+          "ai": 0.8,
+          "downstream": -0.275
+        },
+        "jensen": {
+          "we": 0.05
+        },
+        "multizone": {
+          "me": [
+            -0.5,
+            0.3,
+            1.0
+          ],
+          "we": 0.05,
+          "aU": 12.0,
+          "bU": 1.3,
+          "mU": [
+            0.5,
+            1.0,
+            5.5
+          ]
+        },
+        "gauss": {
+          "ka": 0.3,
+          "kb": 0.004,
+          "alpha": 0.58,
+          "beta": 0.077,
+          "ad": 0.0,
+          "bd": 0.0
+        },
+        "jimenez": {
+          "kd": 0.05,
+          "ad": 0.0,
+          "bd": 0.0
+        },
+        "curl": {
+          "model_grid_resolution": [
+            250,
+            100,
+            75
+          ],
+          "initial_deficit": 2.0,
+          "dissipation": 0.06,
+          "veer_linear": 0.0
+        },
+        "gauss_curl_hybrid": {
+          "ka": 0.3,
+          "kb": 0.004,
+          "alpha": 0.58,
+          "beta": 0.077,
+          "ad": 0.0,
+          "bd": 0.0
+        }
+      }
+    }
+  }
+}

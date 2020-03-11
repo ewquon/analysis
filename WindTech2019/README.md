@@ -1,0 +1,13 @@
+# Comparison of Rotor Wake Identification and Characterization Methods for the Analysis of Wake Dynamics and Evolution
+EW Quon & P Doubrawa
+
+## Analysis workflow
+1. `estimate_inflow.ipynb`: get $U(t,z)$ from $x=-2D$, save to `inflow.npz`
+2. `track-all_methods.ipynb`: samwich driver
+3. `manual_wake_ID.ipynb`: to generate reference data for filtering assessment
+3a. `analysis-Gaussian2D-filtering.ipynb`: compare filtering approaches with reference data
+4. `clean_up_trajectories.ipynb`: to remove outliers, interpolate, and filter the wake trajectories
+5. `calculate_wake_MFoR.ipynb`: calculate `mean_wake_mfor.nc` and `wake_stdev_mfor.nc`
+6. `analyze_wake_MFoR`: analyze wake evolution (size and max deficit) in meandering frame of
+   reference (MFoR)
+7. `analyze_wake_FFoR`: analyze wake dynamics in fixed frame of reference (FFoR)
