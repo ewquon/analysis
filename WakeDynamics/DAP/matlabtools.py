@@ -241,7 +241,7 @@ def convert_met_20Hz(fpath,
                         print('WARNING:',output,'is all NaN')
                 else:
                     df[height] = series
-            df = df.stack()
+            df = df.stack(dropna=False)
             df.index.names = ['datetime','height_'+sensor]
             df.name = prefix
             dflist.append(df)
