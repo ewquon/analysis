@@ -56,8 +56,8 @@ def convert_met(fpath,
                     val = val.decode()
                 attrs[key.strip('_')] = val
         elif key.startswith('sonic_') and key.endswith(height_unit):
-            hgt = float(key[len('sonic_'):-1])
-            sonic_heights[key] = hgt
+            height = float(key[len('sonic_'):-1])
+            sonic_heights[key] = height
         elif key == 'log20Hz':
             continue
         else:
@@ -74,7 +74,7 @@ def convert_met(fpath,
     sonic_starttime = None
     sonic_units = {}
     dflist = []
-    for key,hgt in sonic_heights.items():
+    for key,height in sonic_heights.items():
         sonic = data[key]
      
         # check data
@@ -104,7 +104,8 @@ def convert_met(fpath,
         sonic_times = None
         for output in sonic_outputs:
             if verbose:
-                print('Processing',output,sonic_units[output],'at',hgt,height_unit)
+                print('Processing',output,sonic_units[output],
+                      'at',height,height_unit)
                 
             # get timestamp from seconds since ...
             tseconds = getattr(sonic,time_name)
@@ -130,7 +131,7 @@ def convert_met(fpath,
             outputchannel = getattr(sonic,output)
             if df is None:
                 df = pd.DataFrame(index=sonic_times,dtype=outputchannel.dtype)
-                df['height'] = hgt
+                df['height'] = height
             df[output] = outputchannel
 
         dflist.append(df)
@@ -229,15 +230,15 @@ def convert_met_20Hz(fpath,
             for output in sensor_outputs[sensor][prefix]:
                 # loop over outputs for the given sensor and field (indicated
                 # by prefix) at one or more heights
-                hgt = float(output.split('_')[-1][:-len(height_unit)])
+                height = float(output.split('_')[-1][:-len(height_unit)])
                 if verbose:
-                    print('Processing',output,'at',hgt,height_unit,'from',sensor)
+                    print('Processing',output,'at',height,height_unit,'from',sensor)
                 series = getattr(data,output)
                 if np.all(pd.isna(series)):
                     if verbose:
                         print('WARNING:',output,'is all NaN')
                 else:
-                    df[hgt] = series
+                    df[height] = series
 #            print('Setting',prefix)
 #            print(df)
             df = df.stack()
