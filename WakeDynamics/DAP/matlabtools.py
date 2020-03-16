@@ -94,6 +94,7 @@ def convert_met(fpath,
         # get start time for timestamp conversion
         t0 = pd.to_datetime(getattr(sonic.units,time_name),
                             format='seconds from %Y-%m-%d %H:%M:%S UTC')
+        #attrs['startdate'] = str(t0)  # 1970-01-01 00:00:00
         if sonic_starttime is None:
             sonic_starttime = t0
         else:
@@ -152,9 +153,7 @@ def convert_met(fpath,
 
 def convert_met_20Hz(fpath,
                      sensor_groups={
-                         'BP': ['BP'],
-                         'Calc_BP': ['Calc_BP'],
-                         'Calc_Rho': ['Calc_Rho'],
+                         'BP': ['BP','Calc_BP','Calc_Rho'],
                          'TRH': ['Temp','RH'],
                          'cup': ['CupWS'],
                          'vane': ['VaneWD'],
@@ -225,7 +224,10 @@ def convert_met_20Hz(fpath,
     # now read all the data
     ds = xr.Dataset()
     for sensor,outputs in sensor_groups.items():
+        dflist = []
         for prefix in outputs:
+            # loop over all output fields for a given sensor
+            # note: all fields in this group share the same height(s)
             df = pd.DataFrame(index=t)
             for output in sensor_outputs[sensor][prefix]:
                 # loop over outputs for the given sensor and field (indicated
@@ -239,11 +241,14 @@ def convert_met_20Hz(fpath,
                         print('WARNING:',output,'is all NaN')
                 else:
                     df[height] = series
-#            print('Setting',prefix)
-#            print(df)
             df = df.stack()
             df.index.names = ['datetime','height_'+sensor]
-            ds[prefix] = df.to_xarray()
+            df.name = prefix
+            dflist.append(df)
+        df = pd.concat(dflist, axis=1)
+        tmp = df.to_xarray()
+        for prefix in outputs:
+            ds[prefix] = tmp[prefix]
 
     # assign attributes
     ds.attrs = attrs
