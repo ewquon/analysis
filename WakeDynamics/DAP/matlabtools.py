@@ -31,6 +31,26 @@ other_descriptions = {
     'VaneWD': 'wind direction',
 }
 
+turbine_descriptions = {
+    'Azimuth': 'azimuthal position (of blade 1?)',
+    'BldPitch1': 'blade 1 pitch angle',
+    'Ctr_PitchRef1': 'DESCRIPTION HERE',
+    'Ctr_YawRef': 'DESCRIPTION HERE',
+    'DriveState': 'DESCRIPTION HERE',
+    'GenPwr': 'generator power',
+    'GenSpd': 'generator speed',
+    'GenTq': 'generator torque',
+    'HSShftSpd': 'high-speed shaft speed', # same as generator speed?
+    'NacWindDir': 'nacelle (wind vane?) wind direction',
+    'NacWindSpd': 'nacelle (??? anemometer?) wind speed',
+    'ProdCtrlState': 'DESCRIPTION HERE',
+    'RotorSpd': 'rotor speed', # low-speed shaft speed?
+    'TurbineState': 'DESCRIPTION HERE',
+    'YawHeading': 'yaw heading',
+    'YawOffset': 'DESCRIPTION HERE', # YawHeading - NacWindDir ?
+}
+
+
 time_name = 'Time'
 height_unit = 'm'
 
@@ -260,3 +280,82 @@ def convert_met_20Hz(fpath,
                                                  units=output_units[prefix])
     return ds
 
+
+def convert_turbine(fpath,
+                    description=None,
+                    verbose=True):
+    """
+    Process 20-hz data from matlab file for instruments other than sonics
+    """
+    if verbose:
+        print('Loading',fpath)
+    data = loadmat(fpath, struct_as_record=False, squeeze_me=True)
+
+    # save attributes
+    attrs = {}
+    for key,val in data.items():
+        if key.startswith('__') and key.endswith('__'):
+            if not val == []:
+                if isinstance(val,bytes):
+                    val = val.decode()
+                attrs[key.strip('_')] = val
+    if description:
+        attrs['description'] = description
+    if verbose:
+        print('Attributes',attrs)
+    data = data['turbine']
+
+    # read time
+    t0 = pd.to_datetime(getattr(data.units,time_name),
+                        format='seconds from %Y-%m-%d %H:%M:%S UTC')
+    tseconds = getattr(data,time_name)
+    if any(pd.isna(tseconds)):
+        # interpolate, assuming equally spaced sample times
+        # - need to do this before converting to timedelta
+        isnat = np.where(pd.isna(tseconds))[0]
+        tseconds = pd.Series(tseconds).interpolate()
+        if verbose:
+            print('WARNING: NaT(s) found')
+            for i in isnat:
+                print('  interpolated timestamp at',
+                      t0 + pd.to_timedelta(tseconds.iloc[i], unit='s'))
+    t = t0 + pd.to_timedelta(tseconds, unit='s')
+
+    # check output channels, get units
+    output_units = {}
+    tmp = data._fieldnames
+    tmp.remove(time_name)
+    tmp.remove('units')
+    for channel in dir(data):
+        for output in tmp.copy():
+            units = getattr(data.units,output)
+            try:
+                assert output_units[output] == units
+            except KeyError:
+                output_units[output] = units
+            assert len(getattr(data,output)) == len(t)
+            tmp.remove(output)
+    outputs = list(output_units.keys())
+    assert (len(tmp) == 0)
+
+    # now read all the data
+    df = pd.DataFrame(index=t)
+    for output in outputs:
+        if verbose:
+            print('Processing',output)
+        series = getattr(data,output)
+        if np.all(pd.isna(series)):
+            if verbose:
+                print('WARNING:',output,'is all NaN')
+        else:
+            df[output] = series
+    df.index.name = 'datetime'
+    ds = df.to_xarray()
+
+    # assign attributes
+    ds.attrs = attrs
+    for output in outputs:
+        ds[output] = ds[output].assign_attrs(
+                description=turbine_descriptions[output],
+                units=output_units[output])
+    return ds
