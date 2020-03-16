@@ -68,7 +68,8 @@ def convert_met(fpath,
         print('Attributes',attrs)
         
     # process sonics
-    # note: now the matlab structures no longer behave like dictionaries...
+    # note: after the first level, the matlab structures no longer behave like
+    #       dictionaries...
     sonic_outputs = ['Sonic'+output for output in sonic_outputs]
     sonic_starttime = None
     sonic_units = {}
@@ -126,11 +127,11 @@ def convert_met(fpath,
                 assert all(t == sonic_times), 'mismatched sonic times'
             
             # create dataframe if necessary
+            outputchannel = getattr(sonic,output)
             if df is None:
-                df = pd.DataFrame(index=sonic_times)
+                df = pd.DataFrame(index=sonic_times,dtype=outputchannel.dtype)
                 df['height'] = hgt
-            
-            df[output] = getattr(sonic,output)
+            df[output] = outputchannel
 
         dflist.append(df)
     
