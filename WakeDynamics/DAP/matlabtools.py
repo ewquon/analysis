@@ -58,11 +58,15 @@ height_unit = 'm'
 def convert_sonics(fpath,
                    sonic_outputs=['T','U','V','W','WS','WD'],
                    description=None,
+                   separate_datasets=False,
                    round_times=False,
                    interp_times=False, interp_method='cubic',
                    verbose=True):
     """
     Process sonic data from matlab file
+
+    If separate_datasets is True, then a list of xarray datasets will be
+    returned for each sonic.
 
     If round_times is True, then determine a common date-time index
     based on an estimated sampling frequency. However, unless the
@@ -75,8 +79,8 @@ def convert_sonics(fpath,
     stamps have the same sampling frequency, this will modify the
     original data through interpolation (cubic by default).
     """
-    assert not (round_times and interp_times), \
-            'Specify round_times or interp_times, not both'
+    assert np.count_nonzero([separate_datasets, round_times, interp_times]) <= 1, \
+            'Specify only one option: separate_datasets, round_times or interp_times'
 
     if verbose:
         print('Loading',fpath)
@@ -109,7 +113,7 @@ def convert_sonics(fpath,
     sonic_outputs = ['Sonic'+output for output in sonic_outputs]
     sonic_starttime = None
     sonic_units = {}
-    dflist = []
+    dfdict = {}
     for key,height in sonic_heights.items():
         sonic = data[key]
      
@@ -228,21 +232,39 @@ def convert_sonics(fpath,
                 print('  new timeseries length:',len(df))
 
         df['height'] = height
-        dflist.append(df)
+        dfdict[key] = df
     
-    # convert to xarray with metadata
-    df = pd.concat(dflist)
-    df = df.set_index('height',append=True).sort_index()
-    ds = df.to_xarray()
-    
-    # assign attributes
-    ds.attrs = attrs
-    if round_times:
-        ds['Time'] = ds['Time'].assign_attrs(units=sonic_units['Time'])
-    for output,desc in sonic_descriptions.items():
-        ds[output] = ds[output].assign_attrs(description=desc,
-                                             units=sonic_units[output])
-    return ds
+    if separate_datasets:
+        dslist = {}
+        for key,df in dfdict.items():
+            # convert to xarray with metadata
+            df = df.set_index('height',append=True)
+            ds = df.to_xarray()
+
+            # assign attributes
+            ds.attrs = attrs
+            if round_times:
+                ds['Time'] = ds['Time'].assign_attrs(units=sonic_units['Time'])
+            for output,desc in sonic_descriptions.items():
+                ds[output] = ds[output].assign_attrs(description=desc,
+                                                     units=sonic_units[output])
+            dslist[key] = ds
+        return dslist
+
+    else:
+        # convert to xarray with metadata
+        df = pd.concat(dfdict.values())
+        df = df.set_index('height',append=True).sort_index()
+        ds = df.to_xarray()
+        
+        # assign attributes
+        ds.attrs = attrs
+        if round_times:
+            ds['Time'] = ds['Time'].assign_attrs(units=sonic_units['Time'])
+        for output,desc in sonic_descriptions.items():
+            ds[output] = ds[output].assign_attrs(description=desc,
+                                                 units=sonic_units[output])
+        return ds
 
 
 def convert_met_20Hz(fpath,
