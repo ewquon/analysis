@@ -13,12 +13,12 @@ sensor_descriptions = {
 }
 
 sonic_descriptions = {
-    'SonicT': 'sonic temperature',
-    'SonicU': 'sonic west-east wind component',
-    'SonicV': 'sonic south-north wind component',
-    'SonicW': 'sonic vertical wind componentt',
-    'SonicWS': 'sonic wind speed',
-    'SonicWD': 'sonic wind direction',
+    'SonicT': 'sonic anemometer temperature',
+    'SonicU': 'sonic anemometer west-east wind component',
+    'SonicV': 'sonic anemometer south-north wind component',
+    'SonicW': 'sonic anemometer vertical wind componentt',
+    'SonicWS': 'sonic anemometer wind speed',
+    'SonicWD': 'sonic anemometer wind direction',
 }
 
 other_descriptions = {
@@ -55,13 +55,29 @@ time_name = 'Time'
 height_unit = 'm'
 
 
-def convert_met(fpath,
-                sonic_outputs=['T','U','V','W','WS','WD'],
-                description=None,
-                verbose=True):
+def convert_sonics(fpath,
+                   sonic_outputs=['T','U','V','W','WS','WD'],
+                   description=None,
+                   round_times=False,
+                   interp_times=False, interp_method='cubic',
+                   verbose=True):
     """
     Process sonic data from matlab file
+
+    If round_times is True, then determine a common date-time index
+    based on an estimated sampling frequency. However, unless the
+    original timestamps have the same sampling frequency, this will
+    likely result in a loss of some data points. Unlike interp_times,
+    this will not modify the original data.
+
+    If interp_times is True, then determine a common date-time index
+    based on an estimated sampling frequency. Unless the original time-
+    stamps have the same sampling frequency, this will modify the
+    original data through interpolation (cubic by default).
     """
+    assert not (round_times and interp_times), \
+            'Specify round_times or interp_times, not both'
+
     if verbose:
         print('Loading',fpath)
     data = loadmat(fpath, struct_as_record=False, squeeze_me=True)
@@ -104,6 +120,7 @@ def convert_met(fpath,
         
         # get units
         allunits = getattr(sonic,'units')
+        sonic_units[time_name] = getattr(allunits,time_name)
         for output in sonic_outputs:
             units = getattr(allunits,output)
             if units in sonic_units.keys():
@@ -123,6 +140,7 @@ def convert_met(fpath,
         # now, get the data
         df = None
         sonic_times = None
+        offset = None # for rounding datetime index
         for output in sonic_outputs:
             if verbose:
                 print('Processing',output,sonic_units[output],
@@ -140,31 +158,87 @@ def convert_met(fpath,
                     for i in isnat:
                         print('  interpolated timestamp at',
                               t0 + pd.to_timedelta(tseconds.iloc[i], unit='s'))
-            t = t0 + pd.to_timedelta(tseconds, unit='s')
+            t = pd.DatetimeIndex(t0 + pd.to_timedelta(tseconds, unit='s'),
+                                 name='datetime')
+
+            if round_times or interp_times:
+                # estimate sampling frequency
+                all_dt = np.diff(tseconds)
+                approx_freq = 1.0 / np.nanmean(all_dt)
+                est_dt = 1.0 / np.round(approx_freq)
+                if offset is None:
+                    offset = '{:d}ms'.format(int(1e3*est_dt))
+                else:
+                    assert (offset == '{:d}ms'.format(int(1e3*est_dt)))
+                if verbose:
+                    print('Approx sampling frequency:',approx_freq)
+                    print('  approx dt={:g} s, round to "{:s}" offset'.format(
+                          est_dt, offset))
+                maxdev = np.nanmax(np.abs((t - t.round(offset)).total_seconds().values))
+                if verbose:
+                    print('  max deviation from exact sampling time:',maxdev)
+                assert (maxdev < est_dt/2)
+
             if sonic_times is None:
                 # save times for datetime index
                 sonic_times = t
+                if verbose:
+                    print('Datetime range:',t[0],t[-1])
             else:
-                # sanity check
+                # sanity check: all channels for the output have the same times
                 assert all(t == sonic_times), 'mismatched sonic times'
-            
+
             # create dataframe if necessary
             outputchannel = getattr(sonic,output)
             if df is None:
                 df = pd.DataFrame(index=sonic_times,dtype=outputchannel.dtype)
-                df['height'] = height
             df[output] = outputchannel
 
+        if round_times or interp_times:
+            if verbose:
+                print('Resampling datetime index to',1.0/est_dt,'Hz')
+                print('  original timeseries length:',len(df))
+            if round_times:
+                # save original times
+                df['Time'] = tseconds.values # .values to ignore different indices
+                # one-to-one mapping not guaranteed:
+                df = df.resample(offset).nearest()
+                df = df[~df.index.duplicated()]
+                if verbose:
+                    before,after = len(tseconds), len(np.unique(df['Time']))
+                    if after < before:
+                        print('  NOTE: number of unique times decreased:',
+                              before,after)
+            elif interp_times:
+                newidx = pd.date_range(df.index[0].floor(offset),
+                                       df.index[-1].ceil(offset),
+                                       freq=offset, closed='left',
+                                       name='datetime')
+                if verbose:
+                    print('Interpolating to',newidx)
+                oldidx = df.index
+                df = df.reindex(oldidx.union(newidx)).interpolate(method=interp_method)
+                if newidx[0] < oldidx[0]:
+                    # extrapolate
+                    df.loc[newidx[0],:] = df.loc[oldidx[0],:]
+                df = df.reindex(newidx)
+            else:
+                raise ValueError('Should not be here')
+            if verbose:
+                print('  new timeseries length:',len(df))
+
+        df['height'] = height
         dflist.append(df)
     
     # convert to xarray with metadata
     df = pd.concat(dflist)
-    df.index.name = 'datetime'
-    df = df.set_index('height',append=True)
+    df = df.set_index('height',append=True).sort_index()
     ds = df.to_xarray()
     
     # assign attributes
     ds.attrs = attrs
+    if round_times:
+        ds['Time'] = ds['Time'].assign_attrs(units=sonic_units['Time'])
     for output,desc in sonic_descriptions.items():
         ds[output] = ds[output].assign_attrs(description=desc,
                                              units=sonic_units[output])
@@ -181,7 +255,8 @@ def convert_met_20Hz(fpath,
                      description=None,
                      verbose=True):
     """
-    Process 20-hz data from matlab file for instruments other than sonics
+    Process 20-Hz met data from matlab file for instruments other than
+    sonics
     """
     if verbose:
         print('Loading',fpath)
