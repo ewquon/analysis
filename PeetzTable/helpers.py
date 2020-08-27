@@ -308,3 +308,13 @@ class ThrustEstimator(object):
                     break
         return thrust
 
+    def plot_inputs(self):
+        import matplotlib.pyplot as plt
+        fig,ax = plt.subplots(nrows=3,sharex=True,figsize=(8,8))
+        self.TowerBaseMoment.plot(ax=ax[0])
+        self.RotorAeroMoment.plot(ax=ax[1])
+        self.TowerAeroMoment.plot(ax=ax[2])
+        ax[0].set_ylabel('INPUT\ntotal tower-base\nfore-aft moment\n[kN-m]')
+        ax[1].set_ylabel('INPUT\nmain-shaft\npitching moment\n[kN-m]')
+        ax[2].set_ylabel('CALCULATED\ntower-base\naerodynamic moment\n[kN-m]')
+
