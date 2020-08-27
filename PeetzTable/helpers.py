@@ -179,6 +179,10 @@ class ThrustEstimator(object):
         )
 
     def set_tower_drag_from_inflowwind(self):
+        """Read steady inflow profile from InflowWind input and
+        calculate resulting constant aerodynamic bending moment due to
+        drag
+        """
         inflowwind_input = os.path.join(self.modelpath, self.fst['InflowFile'].strip('"'))
         inf = FASTInputFile(inflowwind_input)
         assert (inf['WindType'] == 1), 'InflowWind WindType '+str(inf['WindType'])+' not supported'
@@ -189,14 +193,61 @@ class ThrustEstimator(object):
         self.set_tower_drag(Uref,shear,zref)
                                   
     def set_tower_drag(self,Uref,shear=0.2,zref=80.):
+        """Calculate aerodynamic bending moment due to drag, either due
+        to:
+        1) a steady power-law wind profile dictated by `Uref`, `shear`,
+           and `zref`;
+        2) a steady wind profile as dictated by `Uref` and `zref`,
+           where both are array-like; or
+        3) a time-varying wind profile as dictated by Uref(t,z) and
+           `zref` where the first dimension of `Uref` should match the
+           length of thet specified tower-base fore-aft moment time-
+           series and the second dimension of `Uref` should match the
+           length of `zref`.
+        If a steady or time-varying profile is provided, it should
+        span the bottom of the rotor up to hub height.
+        """
+        self.TowerAeroMoment = np.zeros_like(self.TowerBaseMoment)
         self.toweraero = pd.DataFrame(self.aerodyn['TowProp'],
                                       columns=['TwrElev','TwrDiam','TwrCd'])
         self.toweraero = self.toweraero.set_index('TwrElev')
         z = self.toweraero.index.values
-        self.toweraero['Uinf'] = Uref * (z/zref)**shear
-        self.toweraero['TwrSectionalDrag'] = self.toweraero['TwrCd'] \
-                * 0.5 * self.AirDens * self.toweraero['Uinf']**2 * self.toweraero['TwrDiam']
-        self.TowerAeroMoment = np.trapz(self.toweraero['TwrSectionalDrag']*z, x=z) / 1000 # [kN]
+        issteady = True
+        if isinstance(Uref,(float,int)):
+            # power-law profile
+            print('Calculating drag from power-law profile')
+            self.toweraero['Uinf'] = Uref * (z/zref)**shear
+        elif len(Uref.shape) == 1:
+            # steady profile
+            print('Calculating drag from steady profile')
+            assert (len(Uref) == len(zref)), 'specify zref to be heights corresponding to Uref'
+            self.toweraero['Uinf'] = np.interp(z, zref, Uref)
+        else:
+            # time-varying profile
+            print('Calculating drag from time-varying profile')
+            assert (len(Uref.shape) == 2), 'specify Uref to be U(t,z)'
+            assert (Uref.shape[0] == len(self.TowerBaseMoment)), \
+                    'the first dimension of Uref should correspond to the tower-base moment time series'
+            assert (Uref.shape[1] == len(zref)), \
+                    'specify zref to be heights corresponding to Uref'
+            if isinstance(Uref,pd.DataFrame):
+                Uref = Uref.values
+            issteady = False
+        if issteady:
+            self.toweraero['TwrSectionalDrag'] = self.toweraero['TwrCd'] \
+                    * 0.5 * self.AirDens * self.toweraero['Uinf']**2 * self.toweraero['TwrDiam']
+            M = np.trapz(self.toweraero['TwrSectionalDrag']*z, x=z)
+            self.TowerAeroMoment[:] = M / 1000 # [kN]
+        else:
+            for i,ti in enumerate(self.TowerBaseMoment.index):
+                Uinf = np.interp(z, zref, Uref[i,:])
+                sectdrag = self.toweraero['TwrCd'] \
+                    * 0.5 * self.AirDens * Uinf**2 * self.toweraero['TwrDiam']
+                self.TowerAeroMoment[i] = np.trapz(sectdrag*z, x=z)
+            self.TowerAeroMoment[:] /= 1000 # [kN]
+        self.TowerAeroMoment = pd.Series(self.TowerAeroMoment,
+                                         index=self.TowerBaseMoment.index,
+                                         name='calculated tower aerodynamic moment [kN-m]')
 
     def _estimate_thrust(self,towertop_deflection=0):
         assert (self.TowerBaseMoment is not None), 'Need to set_towerbase_foreaft_moment()'
