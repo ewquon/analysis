@@ -306,7 +306,9 @@ class ThrustEstimator(object):
                 print(f'iteration {i:d} : T={lastval:f} kN, deflection={TTdefl:f} m, reltol={reltol:g}')
                 if reltol < tol:
                     break
-        return thrust
+            return thrust, TTdefl
+        else:
+            return thrust
 
     def plot_inputs(self):
         import matplotlib.pyplot as plt
