@@ -207,8 +207,8 @@ class ThrustEstimator(object):
                 - self.Wnac * (self.NacCMxn + towertop_deflection)
                 - self.TowerAeroMoment
                ) / ((self.zhub-self.height_from_base) * np.cos(self.ShftTilt))
-        if not isinstance(thrust, pd.Series):
-            thrust = pd.Series(thrust, name='rotor aerodynamic thrust [kN]')
+        thrust = pd.Series(thrust, index=self.TowerBaseMoment.index,
+                           name='calculated rotor aerodynamic thrust [kN]')
         return thrust
 
     def _estimate_towertop_deflection(self,thrust,avg_seconds=60):
